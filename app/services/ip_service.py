@@ -8,10 +8,13 @@ ipinfo.io. Private/reserved addresses are flagged and external lookups skipped.
 from __future__ import annotations
 
 import ipaddress
+from collections.abc import AsyncIterator
+from typing import Any
 
 import dns.asyncresolver
 import httpx
 
+from app.core.concurrency import stream_bounded
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.schemas.common import SourceResult, SourceStatus
@@ -76,6 +79,47 @@ class IPService:
         results.append(await self._ipinfo(str(ip)))
 
         return IPResult(target=str(ip), module="ip", summary=summary, results=results)
+
+    async def stream(self, query: IPQuery) -> AsyncIterator[tuple[str, dict[str, Any]]]:
+        ip = self.parse_ip(query.ip)
+        if not ip.is_global:
+            yield "meta", {"module": "ip", "target": str(ip), "total": 1}
+            yield "result", SourceResult(
+                source="Classification",
+                category="meta",
+                status=SourceStatus.found,
+                data={
+                    "is_private": ip.is_private,
+                    "is_loopback": ip.is_loopback,
+                    "is_reserved": ip.is_reserved,
+                    "is_multicast": ip.is_multicast,
+                },
+            ).model_dump(mode="json")
+            yield "summary", {"ip": str(ip), "is_private": ip.is_private, "is_global": False}
+            return
+
+        factories = [
+            lambda: self._reverse_dns(ip),
+            lambda: self._ipapi(str(ip)),
+            lambda: self._ipinfo(str(ip)),
+        ]
+        yield "meta", {"module": "ip", "target": str(ip), "total": len(factories)}
+        summary: dict[str, Any] = {
+            "ip": str(ip),
+            "version": ip.version,
+            "is_private": False,
+            "is_global": True,
+        }
+        async for outcome in stream_bounded(factories):
+            if isinstance(outcome, BaseException):
+                continue
+            if outcome.source == "ip-api.com" and outcome.status == SourceStatus.found:
+                summary["country"] = outcome.data.get("country")
+                summary["city"] = outcome.data.get("city")
+                summary["org"] = outcome.data.get("org") or outcome.data.get("isp")
+                summary["asn"] = outcome.data.get("as")
+            yield "result", outcome.model_dump(mode="json")
+        yield "summary", summary
 
     async def _reverse_dns(self, ip) -> SourceResult:
         try:

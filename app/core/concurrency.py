@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable, Iterable, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Sequence
 from typing import TypeVar
 
 from app.core.config import get_settings
@@ -33,3 +33,32 @@ async def gather_bounded(
         *(_run(factory) for factory in tasks),
         return_exceptions=True,
     )
+
+
+async def stream_bounded(
+    factories: Iterable[Callable[[], Awaitable[T]]],
+    limit: int | None = None,
+) -> AsyncIterator[T]:
+    """Yield results from *factories* as each one completes.
+
+    Unlike :func:`gather_bounded`, results stream back in completion order — which
+    is what a live console wants. Still bounded by *limit* concurrent workers.
+    Any tasks left pending are cancelled if the consumer stops early (e.g. the
+    client disconnects mid-stream).
+    """
+    if limit is None:
+        limit = get_settings().max_concurrency
+    semaphore = asyncio.Semaphore(max(1, limit))
+
+    async def _run(factory: Callable[[], Awaitable[T]]) -> T:
+        async with semaphore:
+            return await factory()
+
+    tasks = [asyncio.create_task(_run(factory)) for factory in factories]
+    try:
+        for completed in asyncio.as_completed(tasks):
+            yield await completed
+    finally:
+        for task in tasks:
+            if not task.done():
+                task.cancel()

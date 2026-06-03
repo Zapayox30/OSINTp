@@ -11,10 +11,11 @@ def test_health(client):
     assert body["app"] == "OSINTp"
 
 
-def test_root(client):
+def test_root_serves_console(client):
     resp = client.get("/")
     assert resp.status_code == 200
-    assert resp.json()["docs"] == "/docs"
+    assert "text/html" in resp.headers["content-type"]
+    assert "OSINTp" in resp.text
 
 
 def test_openapi_exposes_modules(client):
@@ -27,5 +28,6 @@ def test_openapi_exposes_modules(client):
         "/api/v1/domain",
         "/api/v1/ip",
         "/api/v1/investigate",
+        "/api/v1/stream",
     ):
         assert expected in paths

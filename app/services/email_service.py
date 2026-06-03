@@ -8,12 +8,15 @@ only when an API key is configured.
 from __future__ import annotations
 
 import hashlib
+from collections.abc import AsyncIterator
+from typing import Any
 
 import dns.asyncresolver
 import dns.resolver
 import httpx
 from email_validator import EmailNotValidError, validate_email
 
+from app.core.concurrency import stream_bounded
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.schemas.common import SourceResult, SourceStatus
@@ -55,6 +58,34 @@ class EmailService:
         )
 
         return EmailResult(target=email, module="email", summary=summary, results=results)
+
+    async def stream(self, query: EmailQuery) -> AsyncIterator[tuple[str, dict[str, Any]]]:
+        email = str(query.email).strip().lower()
+        local_part, _, domain = email.partition("@")
+        factories = [
+            lambda: self._syntax_async(email),
+            lambda: self._mx_check(domain),
+            lambda: self._gravatar_check(email),
+            lambda: self._hibp_check(email),
+        ]
+        yield "meta", {"module": "email", "target": email, "total": len(factories)}
+        summary: dict[str, Any] = {
+            "email": email,
+            "domain": domain,
+            "derived_username": local_part,
+        }
+        async for outcome in stream_bounded(factories):
+            if isinstance(outcome, BaseException):
+                continue
+            if outcome.source == "MX Records":
+                summary["has_mx"] = outcome.status == SourceStatus.found
+            elif outcome.source == "Gravatar":
+                summary["has_gravatar"] = outcome.status == SourceStatus.found
+            yield "result", outcome.model_dump(mode="json")
+        yield "summary", summary
+
+    async def _syntax_async(self, email: str) -> SourceResult:
+        return self._syntax_check(email)
 
     @staticmethod
     def _syntax_check(email: str) -> SourceResult:

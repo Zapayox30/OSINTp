@@ -8,11 +8,13 @@ worker pool. No authentication is used — only publicly reachable endpoints.
 from __future__ import annotations
 
 import re
+from collections.abc import AsyncIterator
 from time import perf_counter
+from typing import Any
 
 import httpx
 
-from app.core.concurrency import gather_bounded
+from app.core.concurrency import gather_bounded, stream_bounded
 from app.core.logging import get_logger
 from app.modules.username import Site
 from app.modules.username.registry import available_categories, filter_sites
@@ -85,6 +87,44 @@ class UsernameService:
             results=sorted(shown, key=lambda r: (r.status != SourceStatus.found, r.source)),
         )
 
+    async def stream(
+        self, query: UsernameQuery
+    ) -> AsyncIterator[tuple[str, dict[str, Any]]]:
+        """Yield ``(event, payload)`` pairs as each site probe completes.
+
+        Events: ``meta`` (once, with the total), ``result`` (per source),
+        ``summary`` (once, at the end). Drives the live console via SSE.
+        """
+        username = self.validate_username(query.username)
+        sites = filter_sites(query.categories)
+        yield "meta", {"module": "username", "target": username, "total": len(sites)}
+
+        found: list[str] = []
+        errors = 0
+        rate_limited = 0
+        async for outcome in stream_bounded(
+            [self._make_probe(site, username) for site in sites]
+        ):
+            if isinstance(outcome, BaseException):
+                errors += 1
+                continue
+            if outcome.status == SourceStatus.found:
+                found.append(outcome.source)
+            elif outcome.status == SourceStatus.error:
+                errors += 1
+            elif outcome.status == SourceStatus.rate_limited:
+                rate_limited += 1
+            if query.include_not_found or outcome.status != SourceStatus.not_found:
+                yield "result", outcome.model_dump(mode="json")
+
+        yield "summary", {
+            "sites_checked": len(sites),
+            "found_count": len(found),
+            "found_on": found,
+            "errors": errors,
+            "rate_limited": rate_limited,
+        }
+
     def _make_probe(self, site: Site, username: str):
         async def _factory() -> SourceResult:
             return await self._probe(site, username)
@@ -106,7 +146,7 @@ class UsernameService:
                 error="timeout",
                 elapsed_ms=round((perf_counter() - start) * 1000, 1),
             )
-        except httpx.HTTPError as exc:
+        except Exception as exc:  # noqa: BLE001 — never let one probe break the batch
             return SourceResult(
                 source=site.name,
                 category=site.category,

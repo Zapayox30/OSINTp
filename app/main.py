@@ -8,9 +8,11 @@ Run locally with::
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
 from app.api.router import api_router
 from app.core.config import get_settings
@@ -68,9 +70,12 @@ def create_app() -> FastAPI:
 
     app.include_router(api_router, prefix="/api")
 
+    web_index = Path(__file__).parent / "web" / "index.html"
+
     @app.get("/", tags=["meta"], include_in_schema=False)
-    async def root() -> dict[str, str]:
-        return {"name": settings.app_name, "docs": "/docs", "health": "/health"}
+    async def console() -> FileResponse:
+        """Serve the command-center console (single-page app)."""
+        return FileResponse(web_index)
 
     @app.get("/health", tags=["meta"], response_model=HealthResponse)
     async def health() -> HealthResponse:

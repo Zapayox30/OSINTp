@@ -11,15 +11,17 @@ import asyncio
 import re
 import socket
 import ssl
+from collections.abc import AsyncIterator
 from datetime import datetime
 from time import perf_counter
+from typing import Any
 from urllib.parse import urlparse
 
 import dns.asyncresolver
 import dns.resolver
 import httpx
 
-from app.core.concurrency import gather_bounded
+from app.core.concurrency import gather_bounded, stream_bounded
 from app.core.logging import get_logger
 from app.schemas.common import SourceResult, SourceStatus
 from app.schemas.domain import DomainQuery, DomainResult
@@ -89,6 +91,31 @@ class DomainService:
             "nameservers": records.get("NS", []),
         }
         return DomainResult(target=domain, module="domain", summary=summary, results=results)
+
+    async def stream(self, query: DomainQuery) -> AsyncIterator[tuple[str, dict[str, Any]]]:
+        domain = self.normalize_domain(query.domain)
+        factories: list = [self._make_dns_probe(domain, rt) for rt in _RECORD_TYPES]
+        factories.append(lambda: self._whois(domain))
+        factories.append(lambda: self._tls_certificate(domain))
+        if query.include_subdomains:
+            factories.append(lambda: self._crtsh_subdomains(domain))
+        yield "meta", {"module": "domain", "target": domain, "total": len(factories)}
+
+        records: dict[str, list[str]] = {}
+        async for outcome in stream_bounded(factories):
+            if isinstance(outcome, BaseException):
+                continue
+            if outcome.source.startswith("DNS:") and outcome.status == SourceStatus.found:
+                rtype = outcome.source.split(":", 1)[1]
+                records[rtype] = outcome.data.get("records", [])
+            yield "result", outcome.model_dump(mode="json")
+
+        yield "summary", {
+            "domain": domain,
+            "record_types": sorted(records.keys()),
+            "ipv4": records.get("A", []),
+            "nameservers": records.get("NS", []),
+        }
 
     def _make_dns_probe(self, domain: str, rtype: str):
         async def _factory() -> SourceResult:
