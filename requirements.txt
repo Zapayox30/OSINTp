@@ -1,0 +1,19 @@
+# Core framework
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+
+# Configuration & validation
+pydantic==2.10.4
+pydantic-settings==2.7.1
+email-validator==2.2.0
+
+# Async HTTP client
+httpx==0.28.1
+
+# OSINT data sources
+dnspython==2.7.0
+python-whois==0.9.5
+
+# Testing
+pytest==8.3.4
+pytest-asyncio==0.25.0

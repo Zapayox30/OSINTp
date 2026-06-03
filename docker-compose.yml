@@ -1,0 +1,10 @@
+services:
+  osintp:
+    build: .
+    image: osintp:latest
+    container_name: osintp
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    restart: unless-stopped

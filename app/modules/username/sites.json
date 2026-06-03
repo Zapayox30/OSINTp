@@ -1,0 +1,72 @@
+[
+  { "name": "GitHub", "category": "dev", "url": "https://github.com/{}", "check": "status" },
+  { "name": "GitLab", "category": "dev", "url": "https://gitlab.com/{}", "check": "status" },
+  { "name": "Codeberg", "category": "dev", "url": "https://codeberg.org/{}", "check": "status" },
+  { "name": "Bitbucket", "category": "dev", "url": "https://bitbucket.org/{}/", "check": "status" },
+  { "name": "PyPI", "category": "dev", "url": "https://pypi.org/user/{}/", "check": "status" },
+  {
+    "name": "Docker Hub",
+    "category": "dev",
+    "url": "https://hub.docker.com/u/{}",
+    "url_probe": "https://hub.docker.com/v2/users/{}/",
+    "check": "status"
+  },
+  { "name": "npm", "category": "dev", "url": "https://www.npmjs.com/~{}", "check": "status" },
+  { "name": "Replit", "category": "dev", "url": "https://replit.com/@{}", "check": "status" },
+  { "name": "Keybase", "category": "dev", "url": "https://keybase.io/{}", "check": "status" },
+  { "name": "Dev.to", "category": "dev", "url": "https://dev.to/{}", "check": "status" },
+  {
+    "name": "Hacker News",
+    "category": "dev",
+    "url": "https://news.ycombinator.com/user?id={}",
+    "check": "message",
+    "error_messages": ["No such user."]
+  },
+  { "name": "HackerOne", "category": "security", "url": "https://hackerone.com/{}", "check": "status" },
+  { "name": "TryHackMe", "category": "security", "url": "https://tryhackme.com/p/{}", "check": "status" },
+  {
+    "name": "Reddit",
+    "category": "social",
+    "url": "https://www.reddit.com/user/{}",
+    "url_probe": "https://www.reddit.com/user/{}/about.json",
+    "check": "status"
+  },
+  {
+    "name": "Telegram",
+    "category": "social",
+    "url": "https://t.me/{}",
+    "check": "message",
+    "found_messages": ["tgme_page_title"]
+  },
+  { "name": "Medium", "category": "social", "url": "https://medium.com/@{}", "check": "status" },
+  { "name": "Pinterest", "category": "social", "url": "https://www.pinterest.com/{}/", "check": "status" },
+  { "name": "Mastodon", "category": "social", "url": "https://mastodon.social/@{}", "check": "status" },
+  { "name": "About.me", "category": "social", "url": "https://about.me/{}", "check": "status" },
+  {
+    "name": "Steam",
+    "category": "gaming",
+    "url": "https://steamcommunity.com/id/{}",
+    "check": "message",
+    "error_messages": ["The specified profile could not be found."]
+  },
+  {
+    "name": "Chess.com",
+    "category": "gaming",
+    "url": "https://www.chess.com/member/{}",
+    "url_probe": "https://api.chess.com/pub/player/{}",
+    "check": "status"
+  },
+  { "name": "Lichess", "category": "gaming", "url": "https://lichess.org/@/{}", "check": "status" },
+  { "name": "Twitch", "category": "media", "url": "https://m.twitch.tv/{}", "check": "status" },
+  { "name": "Vimeo", "category": "media", "url": "https://vimeo.com/{}", "check": "status" },
+  { "name": "Flickr", "category": "media", "url": "https://www.flickr.com/people/{}/", "check": "status" },
+  { "name": "Last.fm", "category": "media", "url": "https://www.last.fm/user/{}", "check": "status" },
+  { "name": "SoundCloud", "category": "media", "url": "https://soundcloud.com/{}", "check": "status" },
+  { "name": "Behance", "category": "media", "url": "https://www.behance.net/{}", "check": "status" },
+  {
+    "name": "Wikipedia",
+    "category": "knowledge",
+    "url": "https://en.wikipedia.org/wiki/User:{}",
+    "check": "status"
+  }
+]
