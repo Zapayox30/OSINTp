@@ -29,7 +29,7 @@ from app.api.deps import (
     IPServiceDep,
     UsernameServiceDep,
 )
-from app.api.v1.endpoints.investigation import detect_type
+from app.core.detect import detect_type
 from app.schemas.domain import DomainQuery
 from app.schemas.email import EmailQuery
 from app.schemas.ip import IPQuery
