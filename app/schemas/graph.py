@@ -19,6 +19,9 @@ class EntityType(str, Enum):
     organization = "organization"
     asn = "asn"
     breach = "breach"
+    phone = "phone"
+    address = "address"
+    note = "note"
 
 
 # Entity types the engine knows how to investigate further (pivot from).
@@ -37,6 +40,7 @@ class Entity(BaseModel):
     depth: int = 0
     pivotable: bool = True
     discovered_by: str | None = Field(default=None, description="Relation that surfaced it.")
+    origin: str = Field(default="auto", description="'auto', a module name, or 'manual'.")
 
 
 class Edge(BaseModel):
@@ -46,6 +50,7 @@ class Edge(BaseModel):
     target: str
     relation: str
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    origin: str = Field(default="auto", description="'auto', a module name, or 'manual'.")
 
 
 class GraphQuery(BaseModel):

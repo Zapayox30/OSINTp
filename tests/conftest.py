@@ -2,10 +2,24 @@
 
 from __future__ import annotations
 
-import pytest
-from fastapi.testclient import TestClient
+import os
+import tempfile
+from pathlib import Path
 
-from app.main import app
+# Isolate the cases DB to an ephemeral file *before* the app (and its cached
+# settings) are imported, so tests never touch a real dossier database.
+_TEST_DB = Path(tempfile.gettempdir()) / "osintp_test.db"
+for _leftover in _TEST_DB.parent.glob("osintp_test.db*"):
+    try:
+        _leftover.unlink()
+    except OSError:
+        pass
+os.environ["DATABASE_PATH"] = str(_TEST_DB)
+
+import pytest  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
+
+from app.main import app  # noqa: E402
 
 
 @pytest.fixture

@@ -236,6 +236,23 @@
   .gt-type { width: 70px; flex: none; }
   .gt-val { flex: 1; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .gt-conf { color: var(--text-dim); }
+
+  /* case / dossier controls */
+  .casebtn { font-family: var(--mono); font-size: 12px; background: var(--bg-elev); color: var(--cyan); border: 1px solid var(--line); border-radius: 3px; padding: 9px 10px; cursor: pointer; letter-spacing: 1px; }
+  .casebtn:hover { border-color: var(--cyan); }
+  #case { color: var(--cyan); max-width: 170px; }
+  .intel-box { border: 1px solid var(--line); border-radius: 4px; padding: 9px; margin-bottom: 12px; background: var(--bg-elev); }
+  .ib-row { font-size: 11px; color: var(--text-dim); margin-bottom: 7px; }
+  .ib-row b { color: var(--cyan); letter-spacing: 1px; }
+  #gv-case { color: var(--green); }
+  .ib-form { display: flex; flex-direction: column; gap: 5px; margin-bottom: 6px; }
+  .ib-form select, .ib-form input { font-family: var(--mono); font-size: 11px; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 3px; padding: 5px 6px; outline: none; }
+  .ib-form #madd, .ib-actions button, .ib-actions .imp { font-family: var(--mono); font-size: 10px; letter-spacing: 1px; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 3px; padding: 6px; cursor: pointer; text-align: center; }
+  .ib-form #madd:hover, .ib-actions button:hover, .ib-actions .imp:hover { border-color: var(--green); color: var(--green); }
+  .ib-actions { display: flex; gap: 5px; }
+  .ib-actions button, .ib-actions .imp { flex: 1; }
+  .gnode.manual { stroke: #ffffff; stroke-width: 2.5px; stroke-dasharray: 3 2; }
+
   @media (max-width: 820px) { .gv-side { display: none; } }
 
   @media (max-width: 820px) {
@@ -274,6 +291,8 @@
       <option value="3">DEPTH 3</option>
     </select>
     <button class="scan deep" id="deep">◎ DEEP SCAN</button>
+    <select id="case" title="Active case / dossier"><option value="">— no case —</option></select>
+    <button class="casebtn" id="newcase" title="Create a new case">＋ CASE</button>
   </div>
 
   <div class="statusline">
@@ -314,7 +333,33 @@
     </div>
     <div class="gv-body">
       <svg id="gsvg"><g id="gedges"></g><g id="gnodes"></g></svg>
-      <aside class="gv-side"><div id="gtop"></div></aside>
+      <aside class="gv-side">
+        <div class="intel-box">
+          <div class="ib-row"><b>CASE</b> · <span id="gv-case">— none —</span></div>
+          <div class="ib-form">
+            <select id="mtype">
+              <option value="email">email</option>
+              <option value="username">username</option>
+              <option value="domain">domain</option>
+              <option value="ip">ip</option>
+              <option value="phone">phone</option>
+              <option value="person">person</option>
+              <option value="organization">organization</option>
+              <option value="url">url</option>
+              <option value="address">address</option>
+              <option value="note">note</option>
+            </select>
+            <input id="mvalue" placeholder="known value…" autocomplete="off" spellcheck="false" />
+            <button id="madd">＋ ADD INTEL</button>
+          </div>
+          <div class="ib-actions">
+            <button id="cload" title="Render saved graph">LOAD</button>
+            <button id="cexport" title="Download dossier JSON">EXPORT</button>
+            <label class="imp" title="Import prior research JSON">IMPORT<input type="file" id="cimport" accept=".json,application/json" hidden /></label>
+          </div>
+        </div>
+        <div id="gtop"></div>
+      </aside>
     </div>
     <div class="gv-legend" id="glegend"></div>
   </section>
@@ -523,6 +568,7 @@
     sNodes: $("g-nodes"), sEdges: $("g-edges"), sDepth: $("g-depth"),
   };
   let gnodes = new Map(), gedges = [], ges = null, raf = null, W = 0, H = 0;
+  let activeCase = "";
 
   const gsize = () => { const r = G.svg.getBoundingClientRect(); W = r.width || 800; H = r.height || 600; };
   const nodeRadius = (n) => (n.depth === 0 ? 16 : n.depth === 1 ? 10 : 7);
@@ -536,7 +582,7 @@
     const col = d.depth === 0 ? "#ffffff" : (TYPE_COLOR[d.type] || "#9aa");
     const c = document.createElementNS(SVGNS, "circle");
     c.setAttribute("r", nodeRadius(n)); c.setAttribute("fill", col); c.setAttribute("stroke", col);
-    c.setAttribute("class", "gnode" + (d.depth === 0 ? " seed" : ""));
+    c.setAttribute("class", "gnode" + (d.depth === 0 ? " seed" : "") + (d.origin === "manual" ? " manual" : ""));
     const ti = document.createElementNS(SVGNS, "title");
     ti.textContent = `${d.type}: ${d.value}  (conf ${d.confidence}, depth ${d.depth})`;
     c.appendChild(ti);
@@ -627,7 +673,7 @@
 
   function deepScan() {
     const target = els.target.value.trim();
-    if (!target) { els.target.focus(); return; }
+    if (!target && !activeCase) { els.target.focus(); return; }
     if (es) { es.close(); es = null; }
     resetGraph();
     G.view.classList.add("show");
@@ -636,9 +682,11 @@
     setLed("● LIVE", true); els.scan.disabled = true; G.deep.disabled = true;
     const type = els.type.value, depth = G.depth.value || "2";
     log("sys", `deep scan → ${target} · depth ${depth}`);
-    const p = new URLSearchParams({ target, max_depth: depth });
+    const p = new URLSearchParams({ max_depth: depth });
+    if (target) p.set("target", target);
     if (type) p.set("type", type);
-    ges = new EventSource("/api/v1/graph?" + p.toString());
+    const base = activeCase ? `/api/v1/cases/${activeCase}/enrich?` : "/api/v1/graph?";
+    ges = new EventSource(base + p.toString());
     raf = requestAnimationFrame(tick);
 
     ges.addEventListener("meta", (e) => {
@@ -661,6 +709,7 @@
       if (ges) { ges.close(); ges = null; }
       setLed("● READY", false); els.scan.disabled = false; G.deep.disabled = false;
       log("ok", `graph complete — ${gnodes.size} nodes / ${gedges.length} edges`);
+      if (activeCase) refreshCases(activeCase);
     });
     ges.onerror = () => {
       if (ges && ges.readyState === EventSource.CLOSED) return;
@@ -676,6 +725,121 @@
   G.exit.addEventListener("click", closeGraph);
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && G.view.classList.contains("show")) closeGraph(); });
   window.addEventListener("resize", () => { if (G.view.classList.contains("show")) gsize(); });
+
+  // ===== cases / dossiers =====
+  const C = {
+    sel: $("case"), neu: $("newcase"), gvCase: $("gv-case"),
+    mtype: $("mtype"), mvalue: $("mvalue"), madd: $("madd"),
+    load: $("cload"), exp: $("cexport"), imp: $("cimport"),
+  };
+
+  const splitId = (id) => { const i = id.indexOf(":"); return [id.slice(0, i), id.slice(i + 1)]; };
+  const toManualEntity = (e) => ({ type: e.type, value: e.value, label: e.label || null, confidence: e.confidence != null ? e.confidence : 1.0 });
+  function toManualEdge(e) {
+    if (e.source_type) return e;
+    if (e.source && e.target) {
+      const [st, sv] = splitId(e.source), [tt, tv] = splitId(e.target);
+      return { source_type: st, source_value: sv, target_type: tt, target_value: tv, relation: e.relation, confidence: e.confidence != null ? e.confidence : 1.0 };
+    }
+    return null;
+  }
+
+  function setActiveCase(id) {
+    activeCase = id || "";
+    const o = C.sel.selectedOptions[0];
+    C.gvCase.textContent = activeCase ? (o ? o.textContent : activeCase) : "— none —";
+  }
+
+  async function refreshCases(keep) {
+    try {
+      const list = await (await fetch("/api/v1/cases")).json();
+      C.sel.innerHTML = '<option value="">— no case —</option>' +
+        list.map((x) => `<option value="${x.id}">${x.name} (${x.entity_count}n/${x.edge_count}e)</option>`).join("");
+      if (keep) C.sel.value = keep;
+      setActiveCase(C.sel.value);
+    } catch (e) { log("err", "cases: " + e.message); }
+  }
+
+  async function newCase() {
+    const name = prompt("New case name:");
+    if (!name) return;
+    const r = await fetch("/api/v1/cases", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) });
+    if (!r.ok) { log("err", "create case failed"); return; }
+    const c = await r.json();
+    log("sys", "case created: " + c.name);
+    await refreshCases(c.id);
+  }
+
+  function ensureGraphOpen() {
+    if (!G.view.classList.contains("show")) { G.view.classList.add("show"); gsize(); }
+    if (!raf) raf = requestAnimationFrame(tick);
+  }
+
+  async function addIntel() {
+    if (!activeCase) { log("err", "select or create a case first"); return; }
+    const value = C.mvalue.value.trim();
+    if (!value) { C.mvalue.focus(); return; }
+    const type = C.mtype.value;
+    const r = await fetch(`/api/v1/cases/${activeCase}/entities`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify([{ type, value, confidence: 1.0 }]) });
+    if (!r.ok) { log("err", "add intel failed"); return; }
+    ensureGraphOpen();
+    for (const e of await r.json()) addNode(e);
+    G.sNodes.textContent = gnodes.size;
+    log("ok", `+intel ${type}:${value.slice(0, 24)}`);
+    C.mvalue.value = "";
+    refreshCases(activeCase);
+  }
+
+  async function loadCase() {
+    if (!activeCase) { log("err", "select a case first"); return; }
+    resetGraph();
+    G.view.classList.add("show"); gsize();
+    raf = requestAnimationFrame(tick);
+    const g = await (await fetch(`/api/v1/cases/${activeCase}`)).json();
+    G.title.textContent = g.case.name;
+    for (const e of g.entities) addNode(e);
+    for (const ed of g.edges) addEdge(ed);
+    G.sNodes.textContent = gnodes.size; G.sEdges.textContent = gedges.length;
+    log("sys", `loaded ${g.case.name} — ${g.entities.length} nodes / ${g.edges.length} edges`);
+  }
+
+  async function exportCase() {
+    if (!activeCase) { log("err", "select a case first"); return; }
+    const g = await (await fetch(`/api/v1/cases/${activeCase}/export`)).json();
+    const blob = new Blob([JSON.stringify(g, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `dossier_${(g.case.name || "case").replace(/\s+/g, "_")}.json`;
+    a.click();
+    log("ok", "dossier exported");
+  }
+
+  async function importCase(ev) {
+    const file = ev.target.files[0];
+    if (!file) return;
+    if (!activeCase) { log("err", "select a case first"); ev.target.value = ""; return; }
+    try {
+      const data = JSON.parse(await file.text());
+      const payload = {
+        entities: (data.entities || []).map(toManualEntity),
+        edges: (data.edges || []).map(toManualEdge).filter(Boolean),
+      };
+      const res = await (await fetch(`/api/v1/cases/${activeCase}/import`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })).json();
+      log("ok", `imported ${res.entities_added} entities / ${res.edges_added} edges`);
+      await refreshCases(activeCase);
+      loadCase();
+    } catch (e) { log("err", "import failed: " + e.message); }
+    ev.target.value = "";
+  }
+
+  C.neu.addEventListener("click", newCase);
+  C.sel.addEventListener("change", () => setActiveCase(C.sel.value));
+  C.madd.addEventListener("click", addIntel);
+  C.mvalue.addEventListener("keydown", (e) => { if (e.key === "Enter") addIntel(); });
+  C.load.addEventListener("click", loadCase);
+  C.exp.addEventListener("click", exportCase);
+  C.imp.addEventListener("change", importCase);
+  refreshCases();
 
   // ---- boot sequence ----
   const boot = [

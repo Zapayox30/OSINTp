@@ -30,3 +30,6 @@ htmlcov/
 # Runtime data / caches
 *.log
 data/cache/
+data/
+*.db
+*.sqlite3

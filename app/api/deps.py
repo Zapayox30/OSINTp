@@ -8,6 +8,7 @@ import httpx
 from fastapi import Depends
 
 from app.core.http_client import get_client
+from app.services.cases import CaseStore, get_store
 from app.services.correlation import CorrelationEngine
 from app.services.domain_service import DomainService
 from app.services.email_service import EmailService
@@ -37,8 +38,13 @@ def get_correlation_engine(client: ClientDep) -> CorrelationEngine:
     return CorrelationEngine(client)
 
 
+def get_case_store() -> CaseStore:
+    return get_store()
+
+
 UsernameServiceDep = Annotated[UsernameService, Depends(get_username_service)]
 EmailServiceDep = Annotated[EmailService, Depends(get_email_service)]
 DomainServiceDep = Annotated[DomainService, Depends(get_domain_service)]
 IPServiceDep = Annotated[IPService, Depends(get_ip_service)]
 CorrelationEngineDep = Annotated[CorrelationEngine, Depends(get_correlation_engine)]
+CaseStoreDep = Annotated[CaseStore, Depends(get_case_store)]

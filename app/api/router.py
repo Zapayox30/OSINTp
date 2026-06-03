@@ -4,7 +4,16 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import domain, email, graph, investigation, ip, stream, username
+from app.api.v1.endpoints import (
+    cases,
+    domain,
+    email,
+    graph,
+    investigation,
+    ip,
+    stream,
+    username,
+)
 
 api_router = APIRouter()
 
@@ -16,5 +25,6 @@ v1.include_router(ip.router)
 v1.include_router(investigation.router)
 v1.include_router(stream.router)
 v1.include_router(graph.router)
+v1.include_router(cases.router)
 
 api_router.include_router(v1)

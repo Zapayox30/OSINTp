@@ -30,5 +30,6 @@ def test_openapi_exposes_modules(client):
         "/api/v1/investigate",
         "/api/v1/stream",
         "/api/v1/graph",
+        "/api/v1/cases",
     ):
         assert expected in paths

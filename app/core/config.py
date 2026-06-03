@@ -43,6 +43,9 @@ class Settings(BaseSettings):
     ipinfo_token: str | None = None
     hibp_api_key: str | None = None
 
+    # Persistence (SQLite) for cases / dossiers
+    database_path: str = "data/osintp.db"
+
     @property
     def cors_origin_list(self) -> list[str]:
         """Parse the comma-separated ``cors_origins`` string into a list."""

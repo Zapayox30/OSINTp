@@ -19,6 +19,7 @@ from app.core.config import get_settings
 from app.core.http_client import http_client
 from app.core.logging import get_logger, setup_logging
 from app.schemas.common import HealthResponse
+from app.services.cases import get_store
 
 DESCRIPTION = """
 **OSINTp** is a modular OSINT framework that gathers open-source intelligence
@@ -41,6 +42,7 @@ async def lifespan(app: FastAPI):
     setup_logging()
     logger = get_logger("app")
     await http_client.start()
+    get_store()  # initialise the SQLite schema for cases / dossiers
     logger.info("OSINTp started (%s)", get_settings().environment)
     try:
         yield
