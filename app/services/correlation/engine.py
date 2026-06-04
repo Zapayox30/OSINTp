@@ -21,11 +21,13 @@ from app.schemas.domain import DomainQuery
 from app.schemas.email import EmailQuery
 from app.schemas.graph import Edge, Entity, EntityType, GraphQuery, GraphResult
 from app.schemas.ip import IPQuery
+from app.schemas.phone import PhoneQuery
 from app.schemas.username import UsernameQuery
 from app.services.correlation.extractors import extract
 from app.services.domain_service import DomainService
 from app.services.email_service import EmailService
 from app.services.ip_service import IPService
+from app.services.phone_service import PhoneService
 from app.services.username_service import UsernameService
 
 logger = get_logger(__name__)
@@ -35,6 +37,7 @@ _TYPE_MAP = {
     "email": EntityType.email,
     "domain": EntityType.domain,
     "ip": EntityType.ip,
+    "phone": EntityType.phone,
 }
 
 
@@ -44,6 +47,7 @@ class CorrelationEngine:
         self._email = EmailService(client)
         self._domain = DomainService(client)
         self._ip = IPService(client)
+        self._phone = PhoneService()
 
     # ------------------------------------------------------------------ public
 
@@ -185,6 +189,8 @@ class CorrelationEngine:
                 )
             if entity.type is EntityType.ip:
                 return await self._ip.investigate(IPQuery(ip=entity.value))
+            if entity.type is EntityType.phone:
+                return await self._phone.investigate(PhoneQuery(phone=entity.value))
         except Exception as exc:  # noqa: BLE001 — a bad pivot must not abort the graph
             logger.debug("pivot failed for %s: %s", entity.id, exc)
             return None

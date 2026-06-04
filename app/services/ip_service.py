@@ -78,6 +78,12 @@ class IPService:
         # ipinfo.io (optional)
         results.append(await self._ipinfo(str(ip)))
 
+        # Shodan (optional)
+        shodan = await self._shodan(str(ip))
+        results.append(shodan)
+        if shodan.status == SourceStatus.found:
+            summary["open_ports"] = shodan.data.get("ports", [])
+
         return IPResult(target=str(ip), module="ip", summary=summary, results=results)
 
     async def stream(self, query: IPQuery) -> AsyncIterator[tuple[str, dict[str, Any]]]:
@@ -102,6 +108,7 @@ class IPService:
             lambda: self._reverse_dns(ip),
             lambda: self._ipapi(str(ip)),
             lambda: self._ipinfo(str(ip)),
+            lambda: self._shodan(str(ip)),
         ]
         yield "meta", {"module": "ip", "target": str(ip), "total": len(factories)}
         summary: dict[str, Any] = {
@@ -201,3 +208,51 @@ class IPService:
             return SourceResult(
                 source="ipinfo.io", category="geo", status=SourceStatus.error, error=str(exc)
             )
+
+    async def _shodan(self, ip: str) -> SourceResult:
+        if not self._settings.shodan_api_key:
+            return SourceResult(
+                source="Shodan",
+                category="hosts",
+                status=SourceStatus.skipped,
+                error="No SHODAN_API_KEY configured.",
+            )
+        url = f"https://api.shodan.io/shodan/host/{ip}?key={self._settings.shodan_api_key}"
+        try:
+            resp = await self._client.get(url)
+        except httpx.HTTPError as exc:
+            return SourceResult(
+                source="Shodan", category="hosts", status=SourceStatus.error, error=str(exc)
+            )
+        if resp.status_code == 404:
+            return SourceResult(source="Shodan", category="hosts", status=SourceStatus.not_found)
+        if resp.status_code == 401:
+            return SourceResult(
+                source="Shodan", category="hosts", status=SourceStatus.error, error="Invalid API key"
+            )
+        if resp.status_code != 200:
+            return SourceResult(
+                source="Shodan",
+                category="hosts",
+                status=SourceStatus.error,
+                error=f"Unexpected status {resp.status_code}",
+            )
+        payload = resp.json()
+        services = [
+            {"port": item.get("port"), "transport": item.get("transport"), "product": item.get("product")}
+            for item in payload.get("data", [])
+        ]
+        return SourceResult(
+            source="Shodan",
+            category="hosts",
+            status=SourceStatus.found,
+            url=f"https://www.shodan.io/host/{ip}",
+            data={
+                "ports": payload.get("ports", []),
+                "hostnames": payload.get("hostnames", []),
+                "org": payload.get("org"),
+                "os": payload.get("os"),
+                "vulns": list(payload.get("vulns", [])),
+                "services": services[:20],
+            },
+        )

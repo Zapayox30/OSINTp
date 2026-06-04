@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     # Optional third-party API keys (modules degrade gracefully when unset)
     ipinfo_token: str | None = None
     hibp_api_key: str | None = None
+    shodan_api_key: str | None = None
 
     # Persistence (SQLite) for cases / dossiers
     database_path: str = "data/osintp.db"

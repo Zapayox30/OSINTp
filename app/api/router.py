@@ -11,6 +11,7 @@ from app.api.v1.endpoints import (
     graph,
     investigation,
     ip,
+    phone,
     stream,
     username,
 )
@@ -22,6 +23,7 @@ v1.include_router(username.router)
 v1.include_router(email.router)
 v1.include_router(domain.router)
 v1.include_router(ip.router)
+v1.include_router(phone.router)
 v1.include_router(investigation.router)
 v1.include_router(stream.router)
 v1.include_router(graph.router)

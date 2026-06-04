@@ -12,6 +12,7 @@ from app.api.deps import (
     DomainServiceDep,
     EmailServiceDep,
     IPServiceDep,
+    PhoneServiceDep,
     UsernameServiceDep,
 )
 from app.core.detect import detect_type
@@ -19,6 +20,7 @@ from app.schemas.domain import DomainQuery
 from app.schemas.email import EmailQuery
 from app.schemas.investigation import InvestigationQuery, InvestigationResult, TargetType
 from app.schemas.ip import IPQuery
+from app.schemas.phone import PhoneQuery
 from app.schemas.username import UsernameQuery
 
 router = APIRouter(prefix="/investigate", tags=["investigation"])
@@ -31,6 +33,7 @@ async def investigate(
     email_service: EmailServiceDep,
     domain_service: DomainServiceDep,
     ip_service: IPServiceDep,
+    phone_service: PhoneServiceDep,
 ) -> InvestigationResult:
     target = query.target.strip()
     detected: TargetType = query.type or detect_type(target)
@@ -39,6 +42,8 @@ async def investigate(
     try:
         if detected == "ip":
             result.modules["ip"] = await ip_service.investigate(IPQuery(ip=target))
+        elif detected == "phone":
+            result.modules["phone"] = await phone_service.investigate(PhoneQuery(phone=target))
         elif detected == "email":
             email_env = await email_service.investigate(EmailQuery(email=target))
             result.modules["email"] = email_env

@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 from app.schemas.common import ResultEnvelope
 
-TargetType = Literal["username", "email", "domain", "ip"]
+TargetType = Literal["username", "email", "domain", "ip", "phone"]
 
 
 class InvestigationQuery(BaseModel):

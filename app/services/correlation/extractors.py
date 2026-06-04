@@ -67,6 +67,7 @@ def extract(parent: Entity, envelope: ResultEnvelope) -> tuple[list[Entity], lis
         "email": _from_email,
         "domain": _from_domain,
         "ip": _from_ip,
+        "phone": _from_phone,
     }
     handler = dispatch.get(envelope.module)
     if handler is None:
@@ -166,3 +167,15 @@ def _from_ip(parent, env, nodes, edges) -> None:
             asn = r.data.get("as")
             if asn:
                 _add(nodes, edges, parent, EntityType.asn, asn, "announced_by", 0.7, leaf=True)
+
+
+def _from_phone(parent, env, nodes, edges) -> None:
+    for r in env.results:
+        if r.source == "Carrier" and r.status == SourceStatus.found:
+            car = r.data.get("carrier")
+            if car:
+                _add(nodes, edges, parent, EntityType.organization, car, "carrier", 0.7, leaf=True)
+        elif r.source == "Location" and r.status == SourceStatus.found:
+            loc = r.data.get("location")
+            if loc:
+                _add(nodes, edges, parent, EntityType.address, loc, "phone_location", 0.6, leaf=True)
