@@ -84,3 +84,24 @@ class MapResult(BaseModel):
     case_id: str
     located: int = 0
     points: list[GeoPoint] = Field(default_factory=list)
+
+
+class Snapshot(BaseModel):
+    id: str
+    case_id: str
+    label: str | None = None
+    created_at: datetime
+    entity_count: int = 0
+    edge_count: int = 0
+
+
+class DiffResult(BaseModel):
+    case_id: str
+    base: str
+    against: str
+    added_entities: list[Entity] = Field(default_factory=list)
+    removed_entities: list[Entity] = Field(default_factory=list)
+    added_edges: list[Edge] = Field(default_factory=list)
+    removed_edges: list[Edge] = Field(default_factory=list)
+    changed_entities: list[dict[str, Any]] = Field(default_factory=list)
+    summary: dict[str, Any] = Field(default_factory=dict)

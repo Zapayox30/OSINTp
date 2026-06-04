@@ -17,7 +17,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from app.core.config import get_settings
-from app.schemas.cases import Case
+from app.schemas.cases import Case, Snapshot
 from app.schemas.graph import Edge, Entity, EntityType
 
 PIVOTABLE_VALUE_TYPES = {"username", "email", "domain", "ip"}
@@ -81,6 +81,17 @@ class CaseStore:
                     origin TEXT NOT NULL DEFAULT 'auto',
                     created_at TEXT NOT NULL,
                     PRIMARY KEY (case_id, source, target, relation),
+                    FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE
+                );
+                CREATE TABLE IF NOT EXISTS snapshots (
+                    id TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL,
+                    label TEXT,
+                    created_at TEXT NOT NULL,
+                    entity_count INTEGER NOT NULL DEFAULT 0,
+                    edge_count INTEGER NOT NULL DEFAULT 0,
+                    nodes TEXT NOT NULL DEFAULT '[]',
+                    edges TEXT NOT NULL DEFAULT '[]',
                     FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE
                 );
                 """
@@ -238,6 +249,57 @@ class CaseStore:
                 (case_id, *PIVOTABLE_VALUE_TYPES),
             ).fetchall()
         return [self._entity_from_row(r) for r in rows]
+
+    # ------------------------------------------------------------- snapshots
+
+    def create_snapshot(self, case_id: str, label: str | None = None) -> Snapshot:
+        entities, edges = self.get_graph(case_id)
+        sid = uuid.uuid4().hex[:12]
+        ts = _now()
+        nodes_json = json.dumps([e.model_dump(mode="json") for e in entities])
+        edges_json = json.dumps([e.model_dump(mode="json") for e in edges])
+        with self._connect() as conn:
+            conn.execute(
+                """INSERT INTO snapshots
+                   (id, case_id, label, created_at, entity_count, edge_count, nodes, edges)
+                   VALUES (?,?,?,?,?,?,?,?)""",
+                (sid, case_id, label, ts, len(entities), len(edges), nodes_json, edges_json),
+            )
+        return Snapshot(
+            id=sid, case_id=case_id, label=label, created_at=ts,
+            entity_count=len(entities), edge_count=len(edges),
+        )
+
+    def list_snapshots(self, case_id: str) -> list[Snapshot]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT id, case_id, label, created_at, entity_count, edge_count "
+                "FROM snapshots WHERE case_id=? ORDER BY created_at DESC",
+                (case_id,),
+            ).fetchall()
+        return [
+            Snapshot(
+                id=r["id"], case_id=r["case_id"], label=r["label"],
+                created_at=r["created_at"], entity_count=r["entity_count"],
+                edge_count=r["edge_count"],
+            )
+            for r in rows
+        ]
+
+    def latest_snapshot(self, case_id: str) -> Snapshot | None:
+        snaps = self.list_snapshots(case_id)
+        return snaps[0] if snaps else None
+
+    def get_snapshot_graph(self, snapshot_id: str) -> tuple[list[Entity], list[Edge]] | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT nodes, edges FROM snapshots WHERE id=?", (snapshot_id,)
+            ).fetchone()
+        if row is None:
+            return None
+        entities = [Entity.model_validate(d) for d in json.loads(row["nodes"])]
+        edges = [Edge.model_validate(d) for d in json.loads(row["edges"])]
+        return entities, edges
 
     @staticmethod
     def _entity_from_row(row: sqlite3.Row) -> Entity:

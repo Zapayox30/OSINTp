@@ -139,3 +139,26 @@ def test_map_endpoint_structure(client):
     assert body["case_id"] == cid
     assert [p["ip"] for p in body["points"]] == ["8.8.8.8"]
     assert isinstance(body["located"], int)
+
+
+def test_snapshot_and_diff(client):
+    cid = _new_case(client, "History")
+    client.post(f"/api/v1/cases/{cid}/entities", json=[{"type": "email", "value": "a@b.com"}])
+
+    snap = client.post(f"/api/v1/cases/{cid}/snapshots")
+    assert snap.status_code == 201
+    assert snap.json()["entity_count"] == 1
+
+    # add more intel after the snapshot, then diff
+    client.post(f"/api/v1/cases/{cid}/entities", json=[{"type": "domain", "value": "b.com"}])
+    diff = client.get(f"/api/v1/cases/{cid}/diff").json()
+    assert diff["summary"]["added_entities"] == 1
+    assert diff["summary"]["removed_entities"] == 0
+    assert diff["added_entities"][0]["value"] == "b.com"
+
+    assert len(client.get(f"/api/v1/cases/{cid}/snapshots").json()) == 1
+
+
+def test_diff_without_snapshot_is_404(client):
+    cid = _new_case(client, "NoSnap")
+    assert client.get(f"/api/v1/cases/{cid}/diff").status_code == 404

@@ -19,14 +19,17 @@ from app.schemas.cases import (
     Case,
     CaseCreate,
     CaseGraph,
+    DiffResult,
     GraphImport,
     ImportResult,
     ManualEdge,
     ManualEntity,
     MapResult,
+    Snapshot,
 )
 from app.schemas.graph import Edge, Entity, EntityType, GraphQuery
 from app.services.cases import entity_id
+from app.services.cases.diffing import diff_graphs
 from app.services.cases.store import PIVOTABLE_VALUE_TYPES
 from app.services.report import build_html, build_markdown, collect_geo
 
@@ -155,6 +158,56 @@ async def report_html(
     entities, edges = await asyncio.to_thread(store.get_graph, case_id)
     geo = await collect_geo(ip_service, _ips_in(entities))
     return HTMLResponse(build_html(case, entities, edges, geo))
+
+
+# ------------------------------------------------------- snapshots & diffing
+
+@router.post("/{case_id}/snapshots", response_model=Snapshot, status_code=status.HTTP_201_CREATED)
+async def create_snapshot(
+    store: CaseStoreDep, case_id: str, label: str | None = Query(default=None)
+) -> Snapshot:
+    await _require_case(store, case_id)
+    return await asyncio.to_thread(store.create_snapshot, case_id, label)
+
+
+@router.get("/{case_id}/snapshots", response_model=list[Snapshot])
+async def list_snapshots(store: CaseStoreDep, case_id: str) -> list[Snapshot]:
+    await _require_case(store, case_id)
+    return await asyncio.to_thread(store.list_snapshots, case_id)
+
+
+@router.get("/{case_id}/diff", response_model=DiffResult)
+async def diff_case(
+    store: CaseStoreDep,
+    case_id: str,
+    base: str | None = Query(default=None, description="Snapshot id, or 'latest' (default)."),
+    against: str = Query(default="current", description="'current' (default) or a snapshot id."),
+) -> DiffResult:
+    await _require_case(store, case_id)
+
+    if base in (None, "latest"):
+        snap = await asyncio.to_thread(store.latest_snapshot, case_id)
+        if snap is None:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, "No snapshots yet — create one first."
+            )
+        base_id = snap.id
+        old = await asyncio.to_thread(store.get_snapshot_graph, snap.id)
+    else:
+        old = await asyncio.to_thread(store.get_snapshot_graph, base)
+        base_id = base
+        if old is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, f"Snapshot not found: {base}")
+
+    if against == "current":
+        new = await asyncio.to_thread(store.get_graph, case_id)
+    else:
+        new = await asyncio.to_thread(store.get_snapshot_graph, against)
+        if new is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, f"Snapshot not found: {against}")
+
+    result = diff_graphs(old[0], old[1], new[0], new[1])
+    return DiffResult(case_id=case_id, base=base_id, against=against, **result)
 
 
 # --------------------------------------------------------------- manual intel

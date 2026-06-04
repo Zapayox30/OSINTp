@@ -16,16 +16,18 @@ a través de una API REST limpia, asíncrona y documentada automáticamente (Ope
 
 | Módulo | Endpoint | Qué hace | Fuentes |
 |--------|----------|----------|---------|
-| **Username** | `/api/v1/username` | Busca un handle en ~30 plataformas en paralelo | Páginas/APIs públicas |
+| **Username** | `/api/v1/username` | Busca un handle en ~65 plataformas en paralelo | Páginas/APIs públicas |
 | **Email** | `/api/v1/email` | Validación de sintaxis, registros MX, Gravatar, brechas (opcional) | DNS, Gravatar, HIBP* |
 | **Domain** | `/api/v1/domain` | Registros DNS, WHOIS, certificado TLS, subdominios | DNS, WHOIS, crt.sh |
-| **IP** | `/api/v1/ip` | Geolocalización, ASN, DNS inverso | ip-api.com, ipinfo* |
+| **IP** | `/api/v1/ip` | Geolocalización, ASN, DNS inverso, puertos/servicios | ip-api.com, ipinfo*, Shodan* |
+| **Phone** | `/api/v1/phone` | Validez, región, operador, tipo de línea, zona horaria | phonenumbers (offline) |
 | **Investigate** | `/api/v1/investigate` | Autodetecta el tipo de objetivo y agrega los módulos | — |
 | **Stream** | `/api/v1/stream` | Igual que arriba, pero en vivo vía Server-Sent Events | — |
 | **Graph** | `/api/v1/graph` | Grafo de correlación con auto-pivoting recursivo | todos |
-| **Cases** | `/api/v1/cases` | Expedientes persistentes: intel manual, import/export, enrich | SQLite |
+| **Cases** | `/api/v1/cases` | Expedientes: intel manual, import/export, enrich, informes, mapa, snapshots/diff | SQLite |
+| **Jobs** | `/api/v1/jobs` | Cola en proceso para builds de grafo en segundo plano | — |
 
-\* Requiere una API key opcional (`HIBP_API_KEY`, `IPINFO_TOKEN`). Si no se configura,
+\* Requiere una API key opcional (`HIBP_API_KEY`, `IPINFO_TOKEN`, `SHODAN_API_KEY`). Si no se configura,
 el módulo se omite limpiamente (`status: skipped`).
 
 ---
@@ -44,6 +46,9 @@ dependencias de build). Desde ahí:
   tus datos manuales (que se marcan con anillo punteado y conservan su origen).
 - **REPORT / MD / MAP** — exporta el dossier a **HTML imprimible (→ PDF)** o
   **Markdown**, y abre un **mapa de geolocalización** (Leaflet) de las IPs.
+- **SNAP / DIFF** — guarda una instantánea del grafo y compárala con el estado
+  actual: qué entidades/relaciones se añadieron o quitaron desde la última vez.
+- **🔑 KEY** — guarda una API key (solo necesaria si el servidor define `API_KEY`).
 
 ### Subir intel previa (formato de importación)
 
@@ -181,6 +186,15 @@ Todas las variables son opcionales (ver `.env.example`):
 | `CORS_ORIGINS` | `*` | Orígenes permitidos (CSV) |
 | `IPINFO_TOKEN` | — | Enriquece el módulo IP |
 | `HIBP_API_KEY` | — | Habilita búsqueda de brechas en el módulo Email |
+| `SHODAN_API_KEY` | — | Puertos/servicios/vulns en el módulo IP |
+| `DATABASE_PATH` | `data/osintp.db` | Ruta del SQLite de casos/dossiers |
+| `API_KEY` | — | Si se define, `/api/v1` exige la clave (`X-API-Key` o `?api_key=`) |
+| `RATE_LIMIT_PER_MINUTE` | `0` | Límite de peticiones por IP (0 = desactivado) |
+| `CACHE_TTL_SECONDS` | `300` | TTL de la caché de consultas externas (0 = desactivado) |
+
+> 🛡️ **Producción:** autenticación por API key, rate-limiting por IP y caché TTL
+> son opcionales y vienen desactivados por defecto. Hay CI (GitHub Actions) que
+> corre `ruff` + `pytest` en cada push.
 
 ---
 

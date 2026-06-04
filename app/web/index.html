@@ -254,6 +254,7 @@
   .ib-actions { display: flex; gap: 5px; }
   .ib-actions button, .ib-actions .imp { flex: 1; }
   .gnode.manual { stroke: #ffffff; stroke-width: 2.5px; stroke-dasharray: 3 2; }
+  .gnode.added { stroke: #ffb000; stroke-width: 3px; }
 
   /* geolocation map */
   #mapview { position: fixed; inset: 0; z-index: 60; display: none; flex-direction: column; background: var(--bg); }
@@ -371,6 +372,10 @@
             <button id="creport" title="Printable report (Save as PDF)">REPORT</button>
             <button id="cmd" title="Markdown report">MD</button>
             <button id="cmap" title="Geolocation map">MAP</button>
+          </div>
+          <div class="ib-actions">
+            <button id="csnap" title="Save a snapshot of the current graph">SNAP</button>
+            <button id="cdiff" title="Diff latest snapshot vs current">DIFF</button>
           </div>
         </div>
         <div id="gtop"></div>
@@ -929,6 +934,41 @@
   $("cmd").addEventListener("click", () => openReport("md"));
   $("cmap").addEventListener("click", openMap);
   $("mexit").addEventListener("click", () => $("mapview").classList.remove("show"));
+
+  // ----- history: snapshots & diff -----
+  async function snapshot() {
+    if (!activeCase) { log("err", "select a case first"); return; }
+    const r = await apiFetch(`/api/v1/cases/${activeCase}/snapshots`, { method: "POST" });
+    if (!r.ok) { log("err", "snapshot failed"); return; }
+    const s = await r.json();
+    log("ok", `snapshot saved — ${s.entity_count} nodes / ${s.edge_count} edges`);
+  }
+
+  async function showDiff() {
+    if (!activeCase) { log("err", "select a case first"); return; }
+    const r = await apiFetch(`/api/v1/cases/${activeCase}/diff`);
+    if (!r.ok) { log("err", "diff: " + ((await r.json()).detail || r.status)); return; }
+    const d = await r.json();
+    const s = d.summary;
+    log("sys", `diff vs snapshot: +${s.added_entities}/-${s.removed_entities} nodes, +${s.added_edges}/-${s.removed_edges} edges`);
+    for (const e of d.added_entities) log("ok", `+ ${e.type}:${(e.value || "").slice(0, 24)}`);
+    for (const e of d.removed_entities) log("err", `- ${e.type}:${(e.value || "").slice(0, 24)}`);
+    for (const e of d.added_entities) { const n = gnodes.get(e.id); if (n && n.el) n.el.classList.add("added"); }
+    let html = '<div class="gtop-title">DIFF vs SNAPSHOT</div>';
+    html += `<div class="kv"><span class="k">added</span> : <span class="v found">+${s.added_entities}n / +${s.added_edges}e</span></div>`;
+    html += `<div class="kv"><span class="k">removed</span> : <span class="v">-${s.removed_entities}n / -${s.removed_edges}e</span></div>`;
+    html += `<div class="kv"><span class="k">changed</span> : <span class="v">${s.changed_entities}</span></div>`;
+    if (d.added_entities.length) {
+      html += '<div class="gtop-title">ADDED</div>';
+      for (const e of d.added_entities.slice(0, 14))
+        html += `<div class="gtop-item"><span class="gt-type" style="color:${TYPE_COLOR[e.type] || "#9aa"}">${e.type}</span><span class="gt-val">${(e.value || "").slice(0, 28)}</span></div>`;
+    }
+    G.side.innerHTML = html;
+    ensureGraphOpen();
+  }
+
+  $("csnap").addEventListener("click", snapshot);
+  $("cdiff").addEventListener("click", showDiff);
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && $("mapview").classList.contains("show")) $("mapview").classList.remove("show");
   });
