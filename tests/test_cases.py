@@ -97,3 +97,45 @@ def test_enrich_without_seeds_errors_gracefully(client):
     assert resp.status_code == 200
     assert "event: error" in resp.text
     assert "event: done" in resp.text
+
+
+def _populate(client, name):
+    cid = _new_case(client, name)
+    client.post(
+        f"/api/v1/cases/{cid}/entities",
+        json=[
+            {"type": "person", "value": "Jane Doe"},
+            {"type": "email", "value": "jane@acme.com"},
+            {"type": "ip", "value": "8.8.8.8"},
+        ],
+    )
+    return cid
+
+
+def test_report_markdown(client):
+    cid = _populate(client, "MD Report")
+    resp = client.get(f"/api/v1/cases/{cid}/report.md")
+    assert resp.status_code == 200
+    assert "text/markdown" in resp.headers["content-type"]
+    assert "# OSINT Dossier — MD Report" in resp.text
+    assert "## Entities" in resp.text
+    assert "jane@acme.com" in resp.text
+
+
+def test_report_html(client):
+    cid = _populate(client, "HTML Report")
+    resp = client.get(f"/api/v1/cases/{cid}/report.html")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers["content-type"]
+    assert "OSINT Dossier" in resp.text
+    assert "Jane Doe" in resp.text
+
+
+def test_map_endpoint_structure(client):
+    cid = _populate(client, "Map")
+    resp = client.get(f"/api/v1/cases/{cid}/map")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["case_id"] == cid
+    assert [p["ip"] for p in body["points"]] == ["8.8.8.8"]
+    assert isinstance(body["located"], int)

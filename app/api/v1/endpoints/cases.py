@@ -12,9 +12,9 @@ import json
 from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, HTTPException, Query, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, StreamingResponse
 
-from app.api.deps import CaseStoreDep, CorrelationEngineDep
+from app.api.deps import CaseStoreDep, CorrelationEngineDep, IPServiceDep
 from app.schemas.cases import (
     Case,
     CaseCreate,
@@ -23,10 +23,12 @@ from app.schemas.cases import (
     ImportResult,
     ManualEdge,
     ManualEntity,
+    MapResult,
 )
 from app.schemas.graph import Edge, Entity, EntityType, GraphQuery
 from app.services.cases import entity_id
 from app.services.cases.store import PIVOTABLE_VALUE_TYPES
+from app.services.report import build_html, build_markdown, collect_geo
 
 router = APIRouter(prefix="/cases", tags=["cases"])
 
@@ -110,6 +112,49 @@ async def delete_case(store: CaseStoreDep, case_id: str) -> dict[str, bool]:
 @router.get("/{case_id}/export", response_model=CaseGraph)
 async def export_case(store: CaseStoreDep, case_id: str) -> CaseGraph:
     return await get_case(store, case_id)
+
+
+# ------------------------------------------------------------ reports & map
+
+def _ips_in(entities: list[Entity]) -> list[str]:
+    return [e.value for e in entities if e.type is EntityType.ip]
+
+
+@router.get("/{case_id}/map", response_model=MapResult, summary="Geolocate the case's IPs")
+async def case_map(store: CaseStoreDep, ip_service: IPServiceDep, case_id: str) -> MapResult:
+    await _require_case(store, case_id)
+    entities, _ = await asyncio.to_thread(store.get_graph, case_id)
+    points = await collect_geo(ip_service, _ips_in(entities))
+    located = sum(1 for p in points if p.lat is not None)
+    return MapResult(case_id=case_id, located=located, points=points)
+
+
+@router.get("/{case_id}/report.md", summary="Markdown dossier")
+async def report_markdown(
+    store: CaseStoreDep, ip_service: IPServiceDep, case_id: str
+) -> PlainTextResponse:
+    case = await _require_case(store, case_id)
+    entities, edges = await asyncio.to_thread(store.get_graph, case_id)
+    geo = await collect_geo(ip_service, _ips_in(entities))
+    return PlainTextResponse(
+        build_markdown(case, entities, edges, geo),
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="dossier_{case_id}.md"'},
+    )
+
+
+@router.get(
+    "/{case_id}/report.html",
+    response_class=HTMLResponse,
+    summary="Printable HTML dossier (Save as PDF)",
+)
+async def report_html(
+    store: CaseStoreDep, ip_service: IPServiceDep, case_id: str
+) -> HTMLResponse:
+    case = await _require_case(store, case_id)
+    entities, edges = await asyncio.to_thread(store.get_graph, case_id)
+    geo = await collect_geo(ip_service, _ips_in(entities))
+    return HTMLResponse(build_html(case, entities, edges, geo))
 
 
 # --------------------------------------------------------------- manual intel

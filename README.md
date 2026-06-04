@@ -21,9 +21,47 @@ a través de una API REST limpia, asíncrona y documentada automáticamente (Ope
 | **Domain** | `/api/v1/domain` | Registros DNS, WHOIS, certificado TLS, subdominios | DNS, WHOIS, crt.sh |
 | **IP** | `/api/v1/ip` | Geolocalización, ASN, DNS inverso | ip-api.com, ipinfo* |
 | **Investigate** | `/api/v1/investigate` | Autodetecta el tipo de objetivo y agrega los módulos | — |
+| **Stream** | `/api/v1/stream` | Igual que arriba, pero en vivo vía Server-Sent Events | — |
+| **Graph** | `/api/v1/graph` | Grafo de correlación con auto-pivoting recursivo | todos |
+| **Cases** | `/api/v1/cases` | Expedientes persistentes: intel manual, import/export, enrich | SQLite |
 
 \* Requiere una API key opcional (`HIBP_API_KEY`, `IPINFO_TOKEN`). Si no se configura,
 el módulo se omite limpiamente (`status: skipped`).
+
+---
+
+## 🖥️ Consola "command-center"
+
+Abre **http://localhost:8000** para la consola web (terminal de inteligencia, sin
+dependencias de build). Desde ahí:
+
+- **SCAN** — ejecuta un módulo y transmite los resultados en vivo (SSE).
+- **◎ DEEP SCAN** — lanza el **grafo de correlación**: une `username ↔ email ↔
+  dominio ↔ IP`, pivota recursivamente (p. ej. dominio → email del WHOIS →
+  username → cuentas) y lo dibuja como una telaraña dirigida por fuerzas (SVG).
+- **Casos / Dossiers** — crea un caso, **sube tu propia investigación** (＋ ADD
+  INTEL o IMPORT de JSON), y **DEEP SCAN** fusiona los hallazgos automáticos con
+  tus datos manuales (que se marcan con anillo punteado y conservan su origen).
+- **REPORT / MD / MAP** — exporta el dossier a **HTML imprimible (→ PDF)** o
+  **Markdown**, y abre un **mapa de geolocalización** (Leaflet) de las IPs.
+
+### Subir intel previa (formato de importación)
+
+```json
+{
+  "entities": [
+    {"type": "email", "value": "jane@acme.com", "confidence": 1.0},
+    {"type": "phone", "value": "+1-202-555-0143", "label": "burner"}
+  ],
+  "edges": [
+    {"source_type": "person", "source_value": "Jane Doe",
+     "target_type": "email", "target_value": "jane@acme.com", "relation": "owns"}
+  ]
+}
+```
+
+Tipos soportados: `username, email, domain, ip, phone, address, person,
+organization, url, account, asn, breach, note`.
 
 ---
 

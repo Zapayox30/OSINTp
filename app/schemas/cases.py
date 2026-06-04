@@ -68,3 +68,19 @@ class ImportResult(BaseModel):
     case_id: str
     entities_added: int
     edges_added: int
+
+
+class GeoPoint(BaseModel):
+    ip: str
+    lat: float | None = None
+    lon: float | None = None
+    country: str | None = None
+    city: str | None = None
+    org: str | None = None
+    asn: str | None = None
+
+
+class MapResult(BaseModel):
+    case_id: str
+    located: int = 0
+    points: list[GeoPoint] = Field(default_factory=list)

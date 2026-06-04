@@ -4,6 +4,8 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>OSINTp // OSINT TERMINAL</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
   :root {
     --bg: #04070a;
@@ -253,6 +255,13 @@
   .ib-actions button, .ib-actions .imp { flex: 1; }
   .gnode.manual { stroke: #ffffff; stroke-width: 2.5px; stroke-dasharray: 3 2; }
 
+  /* geolocation map */
+  #mapview { position: fixed; inset: 0; z-index: 60; display: none; flex-direction: column; background: var(--bg); }
+  #mapview.show { display: flex; }
+  #lmap { flex: 1; background: #04070a; }
+  .leaflet-popup-content { font-family: var(--mono); font-size: 12px; line-height: 1.4; }
+  .leaflet-container { background: #04070a; }
+
   @media (max-width: 820px) { .gv-side { display: none; } }
 
   @media (max-width: 820px) {
@@ -354,14 +363,29 @@
           </div>
           <div class="ib-actions">
             <button id="cload" title="Render saved graph">LOAD</button>
-            <button id="cexport" title="Download dossier JSON">EXPORT</button>
+            <button id="cexport" title="Download dossier JSON">JSON</button>
             <label class="imp" title="Import prior research JSON">IMPORT<input type="file" id="cimport" accept=".json,application/json" hidden /></label>
+          </div>
+          <div class="ib-actions">
+            <button id="creport" title="Printable report (Save as PDF)">REPORT</button>
+            <button id="cmd" title="Markdown report">MD</button>
+            <button id="cmap" title="Geolocation map">MAP</button>
           </div>
         </div>
         <div id="gtop"></div>
       </aside>
     </div>
     <div class="gv-legend" id="glegend"></div>
+  </section>
+
+  <section id="mapview">
+    <div class="gv-bar">
+      <button class="gv-exit" id="mexit">▢ EXIT</button>
+      <span class="gv-title">GEOLOCATION // <b id="mtitle">—</b></span>
+      <span class="spacer"></span>
+      <span class="hstat">LOCATED <b id="m-count">0</b></span>
+    </div>
+    <div id="lmap"></div>
   </section>
 
   <footer>
@@ -839,6 +863,57 @@
   C.load.addEventListener("click", loadCase);
   C.exp.addEventListener("click", exportCase);
   C.imp.addEventListener("change", importCase);
+
+  // ----- reports & geolocation map -----
+  function openReport(kind) {
+    if (!activeCase) { log("err", "select a case first"); return; }
+    if (kind === "md") window.location.href = `/api/v1/cases/${activeCase}/report.md`;
+    else window.open(`/api/v1/cases/${activeCase}/report.html`, "_blank");
+    log("sys", "dossier " + (kind === "md" ? "markdown" : "report") + " generated");
+  }
+
+  let lmap = null, lmarkers = null;
+  async function openMap() {
+    if (!activeCase) { log("err", "select a case first"); return; }
+    $("mapview").classList.add("show");
+    $("mtitle").textContent = C.sel.selectedOptions[0] ? C.sel.selectedOptions[0].textContent : activeCase;
+    if (typeof L === "undefined") {
+      $("lmap").innerHTML = '<p style="padding:20px;color:#888">Map library unavailable (offline).</p>';
+      return;
+    }
+    if (!lmap) {
+      lmap = L.map("lmap", { zoomControl: true }).setView([20, 0], 2);
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+        { maxZoom: 19, attribution: "&copy; OpenStreetMap &copy; CARTO" }).addTo(lmap);
+      lmarkers = L.layerGroup().addTo(lmap);
+    }
+    setTimeout(() => lmap.invalidateSize(), 60);
+    lmarkers.clearLayers();
+    try {
+      const data = await (await fetch(`/api/v1/cases/${activeCase}/map`)).json();
+      $("m-count").textContent = data.located;
+      const pts = [];
+      for (const p of data.points) {
+        if (p.lat == null || p.lon == null) continue;
+        const loc = [p.city, p.country].filter(Boolean).join(", ") || "unknown";
+        L.circleMarker([p.lat, p.lon], { radius: 7, color: "#34ff9c", fillColor: "#34ff9c", fillOpacity: 0.55, weight: 2 })
+          .bindPopup(`<b>${p.ip}</b><br>${loc}<br>${p.org || ""}<br><small>${p.asn || ""}</small>`)
+          .addTo(lmarkers);
+        pts.push([p.lat, p.lon]);
+      }
+      if (pts.length) lmap.fitBounds(pts, { padding: [40, 40], maxZoom: 6 });
+      log(data.located ? "ok" : "err", `map: ${data.located}/${data.points.length} IPs located`);
+    } catch (e) { log("err", "map failed: " + e.message); }
+  }
+
+  $("creport").addEventListener("click", () => openReport("html"));
+  $("cmd").addEventListener("click", () => openReport("md"));
+  $("cmap").addEventListener("click", openMap);
+  $("mexit").addEventListener("click", () => $("mapview").classList.remove("show"));
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && $("mapview").classList.contains("show")) $("mapview").classList.remove("show");
+  });
+
   refreshCases();
 
   // ---- boot sequence ----
