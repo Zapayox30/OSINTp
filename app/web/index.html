@@ -281,6 +281,7 @@
     <span class="hstat">SESSION <b id="sid">----</b></span>
     <span class="hstat">UTC <b id="clock">--:--:--</b></span>
     <span class="hstat">SYS <span id="status-led">● STANDBY</span></span>
+    <span class="hstat" id="keybtn" title="Set API key (if the server requires one)" style="cursor:pointer">🔑 KEY</span>
   </header>
 
   <div class="cmd">
@@ -398,6 +399,15 @@
 (() => {
   "use strict";
   const $ = (id) => document.getElementById(id);
+
+  // optional API key (only needed if the server sets API_KEY); appended to every request
+  function withKey(u) {
+    const k = localStorage.getItem("osintp_key") || "";
+    return k ? u + (u.includes("?") ? "&" : "?") + "api_key=" + encodeURIComponent(k) : u;
+  }
+  const apiSSE = (u) => new EventSource(withKey(u));
+  const apiFetch = (u, o) => fetch(withKey(u), o);
+
   const els = {
     target: $("target"), type: $("type"), scan: $("scan"),
     results: $("results"), srcCount: $("src-count"), bar: $("bar"),
@@ -541,7 +551,7 @@
 
     const params = new URLSearchParams({ target, include_not_found: "true" });
     if (type) params.set("type", type);
-    es = new EventSource("/api/v1/stream?" + params.toString());
+    es = apiSSE("/api/v1/stream?" + params.toString());
 
     es.addEventListener("start", (e) => {
       const d = JSON.parse(e.data);
@@ -710,7 +720,7 @@
     if (target) p.set("target", target);
     if (type) p.set("type", type);
     const base = activeCase ? `/api/v1/cases/${activeCase}/enrich?` : "/api/v1/graph?";
-    ges = new EventSource(base + p.toString());
+    ges = apiSSE(base + p.toString());
     raf = requestAnimationFrame(tick);
 
     ges.addEventListener("meta", (e) => {
@@ -776,7 +786,7 @@
 
   async function refreshCases(keep) {
     try {
-      const list = await (await fetch("/api/v1/cases")).json();
+      const list = await (await apiFetch("/api/v1/cases")).json();
       C.sel.innerHTML = '<option value="">— no case —</option>' +
         list.map((x) => `<option value="${x.id}">${x.name} (${x.entity_count}n/${x.edge_count}e)</option>`).join("");
       if (keep) C.sel.value = keep;
@@ -787,7 +797,7 @@
   async function newCase() {
     const name = prompt("New case name:");
     if (!name) return;
-    const r = await fetch("/api/v1/cases", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) });
+    const r = await apiFetch("/api/v1/cases", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) });
     if (!r.ok) { log("err", "create case failed"); return; }
     const c = await r.json();
     log("sys", "case created: " + c.name);
@@ -804,7 +814,7 @@
     const value = C.mvalue.value.trim();
     if (!value) { C.mvalue.focus(); return; }
     const type = C.mtype.value;
-    const r = await fetch(`/api/v1/cases/${activeCase}/entities`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify([{ type, value, confidence: 1.0 }]) });
+    const r = await apiFetch(`/api/v1/cases/${activeCase}/entities`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify([{ type, value, confidence: 1.0 }]) });
     if (!r.ok) { log("err", "add intel failed"); return; }
     ensureGraphOpen();
     for (const e of await r.json()) addNode(e);
@@ -819,7 +829,7 @@
     resetGraph();
     G.view.classList.add("show"); gsize();
     raf = requestAnimationFrame(tick);
-    const g = await (await fetch(`/api/v1/cases/${activeCase}`)).json();
+    const g = await (await apiFetch(`/api/v1/cases/${activeCase}`)).json();
     G.title.textContent = g.case.name;
     for (const e of g.entities) addNode(e);
     for (const ed of g.edges) addEdge(ed);
@@ -829,7 +839,7 @@
 
   async function exportCase() {
     if (!activeCase) { log("err", "select a case first"); return; }
-    const g = await (await fetch(`/api/v1/cases/${activeCase}/export`)).json();
+    const g = await (await apiFetch(`/api/v1/cases/${activeCase}/export`)).json();
     const blob = new Blob([JSON.stringify(g, null, 2)], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -848,13 +858,22 @@
         entities: (data.entities || []).map(toManualEntity),
         edges: (data.edges || []).map(toManualEdge).filter(Boolean),
       };
-      const res = await (await fetch(`/api/v1/cases/${activeCase}/import`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })).json();
+      const res = await (await apiFetch(`/api/v1/cases/${activeCase}/import`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })).json();
       log("ok", `imported ${res.entities_added} entities / ${res.edges_added} edges`);
       await refreshCases(activeCase);
       loadCase();
     } catch (e) { log("err", "import failed: " + e.message); }
     ev.target.value = "";
   }
+
+  $("keybtn").addEventListener("click", () => {
+    const cur = localStorage.getItem("osintp_key") || "";
+    const v = prompt("API key (leave empty to clear):", cur);
+    if (v === null) return;
+    if (v) localStorage.setItem("osintp_key", v); else localStorage.removeItem("osintp_key");
+    log("sys", v ? "API key set" : "API key cleared");
+    refreshCases();
+  });
 
   C.neu.addEventListener("click", newCase);
   C.sel.addEventListener("change", () => setActiveCase(C.sel.value));
@@ -867,8 +886,8 @@
   // ----- reports & geolocation map -----
   function openReport(kind) {
     if (!activeCase) { log("err", "select a case first"); return; }
-    if (kind === "md") window.location.href = `/api/v1/cases/${activeCase}/report.md`;
-    else window.open(`/api/v1/cases/${activeCase}/report.html`, "_blank");
+    if (kind === "md") window.location.href = withKey(`/api/v1/cases/${activeCase}/report.md`);
+    else window.open(withKey(`/api/v1/cases/${activeCase}/report.html`), "_blank");
     log("sys", "dossier " + (kind === "md" ? "markdown" : "report") + " generated");
   }
 
@@ -890,7 +909,7 @@
     setTimeout(() => lmap.invalidateSize(), 60);
     lmarkers.clearLayers();
     try {
-      const data = await (await fetch(`/api/v1/cases/${activeCase}/map`)).json();
+      const data = await (await apiFetch(`/api/v1/cases/${activeCase}/map`)).json();
       $("m-count").textContent = data.located;
       const pts = [];
       for (const p of data.points) {

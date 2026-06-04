@@ -21,6 +21,7 @@ import dns.asyncresolver
 import dns.resolver
 import httpx
 
+from app.core.cache import stable_source, ttl_cached
 from app.core.concurrency import gather_bounded, stream_bounded
 from app.core.logging import get_logger
 from app.schemas.common import SourceResult, SourceStatus
@@ -59,7 +60,7 @@ class DomainService:
             [self._make_dns_probe(domain, rtype) for rtype in _RECORD_TYPES]
         )
         records: dict[str, list[str]] = {}
-        for rtype, outcome in zip(_RECORD_TYPES, dns_results):
+        for rtype, outcome in zip(_RECORD_TYPES, dns_results, strict=False):
             if isinstance(outcome, BaseException):
                 continue
             if outcome.status == SourceStatus.found:
@@ -123,6 +124,7 @@ class DomainService:
 
         return _factory
 
+    @ttl_cached(stable_source)
     async def _dns_record(self, domain: str, rtype: str) -> SourceResult:
         try:
             answers = await dns.asyncresolver.resolve(domain, rtype)
@@ -197,7 +199,7 @@ class DomainService:
             cert = await asyncio.get_running_loop().run_in_executor(
                 None, self._tls_blocking, domain
             )
-        except (OSError, ssl.SSLError, socket.timeout) as exc:
+        except (TimeoutError, OSError, ssl.SSLError) as exc:
             return SourceResult(
                 source="TLS Certificate",
                 category="tls",

@@ -50,7 +50,7 @@ class UsernameService:
         )
 
         normalised: list[SourceResult] = []
-        for site, outcome in zip(sites, results):
+        for site, outcome in zip(sites, results, strict=False):
             if isinstance(outcome, BaseException):
                 normalised.append(
                     SourceResult(

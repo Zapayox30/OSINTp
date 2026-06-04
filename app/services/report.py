@@ -213,8 +213,10 @@ def build_html(case: Case, entities: list[Entity], edges: list[Edge], geo: list[
   .toolbar {{ text-align: center; margin: 16px; }}
   button {{ font: inherit; background: var(--accent); color: #fff; border: 0; border-radius: 4px;
     padding: 9px 18px; cursor: pointer; }}
-  footer {{ color: var(--muted); font-size: 12px; margin-top: 24px; border-top: 1px solid var(--line); padding-top: 10px; }}
-  @media print {{ body {{ background: #fff; }} .sheet {{ box-shadow: none; margin: 0; }} .toolbar {{ display: none; }} }}
+  footer {{ color: var(--muted); font-size: 12px; margin-top: 24px;
+    border-top: 1px solid var(--line); padding-top: 10px; }}
+  @media print {{ body {{ background: #fff; }}
+    .sheet {{ box-shadow: none; margin: 0; }} .toolbar {{ display: none; }} }}
 </style></head>
 <body>
   <div class="toolbar"><button onclick="window.print()">🖨 Print / Save as PDF</button></div>

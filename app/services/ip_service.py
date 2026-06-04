@@ -14,6 +14,7 @@ from typing import Any
 import dns.asyncresolver
 import httpx
 
+from app.core.cache import stable_source, ttl_cached
 from app.core.concurrency import stream_bounded
 from app.core.config import get_settings
 from app.core.logging import get_logger
@@ -146,6 +147,7 @@ class IPService:
                 error=str(exc),
             )
 
+    @ttl_cached(stable_source)
     async def _ipapi(self, ip: str) -> SourceResult:
         url = f"http://ip-api.com/json/{ip}?fields={_IPAPI_FIELDS}"
         try:

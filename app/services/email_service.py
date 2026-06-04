@@ -16,6 +16,7 @@ import dns.resolver
 import httpx
 from email_validator import EmailNotValidError, validate_email
 
+from app.core.cache import stable_source, ttl_cached
 from app.core.concurrency import stream_bounded
 from app.core.config import get_settings
 from app.core.logging import get_logger
@@ -105,6 +106,7 @@ class EmailService:
                 error=str(exc),
             )
 
+    @ttl_cached(stable_source)
     async def _mx_check(self, domain: str) -> SourceResult:
         try:
             answers = await dns.asyncresolver.resolve(domain, "MX")

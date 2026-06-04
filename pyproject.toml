@@ -19,7 +19,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.3.4", "pytest-asyncio>=0.25.0"]
+dev = ["pytest>=8.3.4", "pytest-asyncio>=0.25.0", "ruff>=0.8.0"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -27,11 +27,13 @@ asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 
 [tool.ruff]
-line-length = 100
+line-length = 120
 target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
+# B008: FastAPI uses Depends()/Query() as parameter defaults by design.
+ignore = ["B008"]
 
 [build-system]
 requires = ["setuptools>=68"]

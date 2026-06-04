@@ -47,6 +47,11 @@ class Settings(BaseSettings):
     # Persistence (SQLite) for cases / dossiers
     database_path: str = "data/osintp.db"
 
+    # Production hardening (all optional)
+    api_key: str | None = None          # if set, /api/v1 requires it
+    rate_limit_per_minute: int = 0      # 0 disables per-IP rate limiting
+    cache_ttl_seconds: int = 300        # 0 disables the outbound-lookup cache
+
     @property
     def cors_origin_list(self) -> list[str]:
         """Parse the comma-separated ``cors_origins`` string into a list."""

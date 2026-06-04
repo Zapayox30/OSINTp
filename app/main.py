@@ -18,6 +18,7 @@ from app.api.router import api_router
 from app.core.config import get_settings
 from app.core.http_client import http_client
 from app.core.logging import get_logger, setup_logging
+from app.core.ratelimit import RateLimitMiddleware
 from app.schemas.common import HealthResponse
 from app.services.cases import get_store
 
@@ -69,6 +70,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.add_middleware(RateLimitMiddleware)
 
     app.include_router(api_router, prefix="/api")
 
